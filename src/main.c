@@ -1,10 +1,22 @@
 #include <stdbool.h>
 #include <stdint.h>
+
 #if defined(_WIN32)
 #  include <windows.h>
 #  ifndef UNICODE
 #    define UNICODE
 #  endif
+
+/* Forward declaration */
+LRESULT CALLBACK win32WndProc(HWND, UINT, WPARAM, LPARAM);
+
+/* main loop */
+static bool global_running = true;
+
+static BITMAPINFO frameBitmapInfo;
+static HBITMAP frameBitmap = 0;
+static HDC frameDeviceContext = 0;
+int bytes_per_pixel = 4;
 
 // START OF GDI Drawing declarations {{{
 struct {
@@ -12,12 +24,6 @@ struct {
   int height;
   uint32_t *pixels; // pixel array for the bitmap
 } frame = {0};
-
-static BITMAPINFO frameBitmapInfo;
-static HBITMAP frameBitmap = 0;
-static HDC frameDeviceContext = 0;
-
-int bytes_per_pixel = 4;
 
 void draw_random_gradient(uint32_t *bitmap_memory, int bitmap_width, int bitmap_height, int x_offset, int y_offset) {
   int pitch = bitmap_width * bytes_per_pixel;
@@ -61,12 +67,6 @@ void draw_random_pixel_values(void) {
 }
 
 /// }}}
-
-/* main loop */
-bool running = true;
-
-/* Forward declaration */
-LRESULT CALLBACK win32WndProc(HWND, UINT, WPARAM, LPARAM);
 
 /**
  * Entrypoint for Windows
@@ -142,8 +142,8 @@ int WINAPI WinMain(
   DWORD window_style          = WS_OVERLAPPEDWINDOW;
   int window_x                = CW_USEDEFAULT; // horizontal position of the window
   int window_y                = CW_USEDEFAULT; // vertical position of the window
-  int window_width            = 300;
-  int window_height           = 250;
+  int window_width            = 1024;
+  int window_height           = 768;
   HWND window_parent          = NULL;
   HMENU window_menu           = NULL;
   LPVOID lp_param             = NULL;
@@ -181,12 +181,12 @@ int WINAPI WinMain(
   int x_offset = 0;
   int y_offset = 0;
 
-  while (running) {
+  while (global_running) {
     // Run the message loop
     // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-peekmessagew
     // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-dispatchmessagea
     while (PeekMessageW(&msg, 0, 0, 0, PM_REMOVE)) {
-      if (msg.message == WM_QUIT) running = false;
+      if (msg.message == WM_QUIT) { global_running = false; }
       TranslateMessage(&msg);
       DispatchMessage(&msg);
     }
@@ -233,7 +233,7 @@ win32WndProc(HWND windowHandle, UINT msg, WPARAM wParam, LPARAM lParam)
     } break;
     case WM_QUIT:
     case WM_DESTROY: {
-      running = false;
+      global_running = false;
     } break;
     // GDI Drawing logic {{{
     case WM_PAINT: {
