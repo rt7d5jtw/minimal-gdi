@@ -19,4 +19,7 @@ REM if not defined DevEnvDir call %msvcdir%vcvars64.bat >nul
 
 echo "Current directory %cd%"
 
-cl -FC -Zi -Fe:%EXENAME% src\main.c user32.lib gdi32.lib
+if not exist build\ mkdir build\
+pushd build\
+cl -FC -Zi -Fe:%EXENAME% ..\src\main.c user32.lib gdi32.lib
+popd
