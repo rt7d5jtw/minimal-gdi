@@ -1,15 +1,13 @@
-## How to run?
+# minimal-gdi
 
-build:
-```console
-\build.bat
-```
+A minimal Win32 GDI template in C created while watching Handmade Hero. It scaffolds a basic window, initializes a custom software pixel buffer via a DIB section, runs a real-time rendering loop to animate a gradient, and includes an MSVC compilation batch script targeting modern Windows as well as Windows XP (32-bit).
 
-run:
-```console
-.\build\demo.exe
-```
+![Running on Windows XP](demo.png)
 
 ---
 
-a minimal win32 gdi template in c created while watching handmade hero episodes. it scaffolds a basic window, initializes a custom software pixel buffer via a dib section, runs a real-time rendering loop to animate a custom gradient, and includes an msvc compilation batch script.
+## How to run?
+
+Build:
+```console
+.\build.bat
