@@ -1,6 +1,8 @@
 # minimal-gdi
 
-A minimal Win32 GDI template in C created while watching Handmade Hero. It scaffolds a basic window, initializes a custom software pixel buffer via a DIB section, runs a real-time rendering loop to animate a gradient, and includes an MSVC compilation batch script targeting modern Windows as well as Windows XP (32-bit).
+A small Win32 GDI demo program in C89 created while watching Handmade Hero.
+
+It implements a win32 window with a DIB-backed offscreen buffer for software rasterization, animated via a real-time message loop and built with an MSVC script targeting Windows XP (x86) through modern Windows
 
 ![Running on Windows XP](demo.png)
 
