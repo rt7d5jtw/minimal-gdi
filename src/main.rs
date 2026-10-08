@@ -1,7 +1,0 @@
-use windows::Win32::Foundation::*;
-use windows::Win32::UI::WindowsAndMessaging::*;
-
-fn main() -> windows::core::Result<()> {
-  let instance = unsafe { GetModuleHandleW(None)? };
-  Ok(())
-}
