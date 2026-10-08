@@ -1,6 +1,6 @@
+
 use std::mem::size_of;
 use std::ptr::{null, null_mut};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation as win32_base;
@@ -33,7 +33,7 @@ struct Win32_OffscreenBuffer {
 
 // Global variables
 static mut RUNNING: bool = true;
-const BYTES_PER_PIXEL: u32 = 4;
+const BYTES_PER_PIXEL: i32 = 4;
 
 unsafe impl Sync for OffscreenBuffer {}
 unsafe impl Sync for Win32_OffscreenBuffer {}
@@ -70,8 +70,8 @@ static mut GLOBAL_BACKBUFFER: Win32_OffscreenBuffer = Win32_OffscreenBuffer {
     },
 };
 
-fn draw_gradient(x_offset: u32, y_offset: u32) {
-    let offscreen_buffer = unsafe { GLOBAL_BACKBUFFER.offscreen_buffer };
+fn draw_gradient(x_offset: f32, y_offset: f32) {
+    let offscreen_buffer = unsafe { &GLOBAL_BACKBUFFER.offscreen_buffer };
     if offscreen_buffer.pixels.is_null() {
         return;
     }
@@ -84,8 +84,8 @@ fn draw_gradient(x_offset: u32, y_offset: u32) {
         let mut pixel: *mut u32 = row as *mut u32;
         for x in 0..width {
             // clamp to 8 bits
-            let blue  = (x + x_offset) & 0xFF;
-            let green = (y + y_offset) & 0xFF;
+            let blue  = (x + (x_offset as u32)) & 0xFF;
+            let green = (y + (y_offset as u32)) & 0xFF;
             let red   = 0;
             let packed_colors: u32 = (red << 16) | (green << 8) | blue;
             unsafe {
@@ -100,6 +100,43 @@ fn draw_gradient(x_offset: u32, y_offset: u32) {
     }
 }
 
+fn win32_resize_dib_section(width: u32, height: u32) {
+    unsafe {
+        if !GLOBAL_BACKBUFFER.handle.is_invalid() {
+            let _ = win32::DeleteObject(GLOBAL_BACKBUFFER.handle);
+            GLOBAL_BACKBUFFER.handle = win32::HBITMAP::default();
+        }
+
+        GLOBAL_BACKBUFFER.offscreen_buffer.width  = width as i32;
+        GLOBAL_BACKBUFFER.offscreen_buffer.height = height as i32;
+        GLOBAL_BACKBUFFER.offscreen_buffer.pitch  = (width as i32) * (BYTES_PER_PIXEL as i32);
+
+        GLOBAL_BACKBUFFER.info.bmiHeader.biSize        = std::mem::size_of::<win32::BITMAPINFOHEADER>() as u32;
+        GLOBAL_BACKBUFFER.info.bmiHeader.biWidth       = width as i32;
+        GLOBAL_BACKBUFFER.info.bmiHeader.biHeight      = -(height as i32);
+        GLOBAL_BACKBUFFER.info.bmiHeader.biPlanes      = 1;
+        GLOBAL_BACKBUFFER.info.bmiHeader.biBitCount    = 32;
+        GLOBAL_BACKBUFFER.info.bmiHeader.biCompression = win32::BI_RGB.0;
+
+        let color_data_usage: win32::DIB_USAGE = win32::DIB_RGB_COLORS;
+        let file_mapping_handle: win32::HANDLE = win32::HANDLE::default();
+        let file_mapping_offset: u32 = 0;
+
+        let dib_bitmap_handle: win32::HBITMAP = win32::CreateDIBSection(
+                GLOBAL_BACKBUFFER.device_context,
+                &GLOBAL_BACKBUFFER.info,
+                color_data_usage,
+                &mut GLOBAL_BACKBUFFER.offscreen_buffer.pixels as *mut _ as *mut *mut core::ffi::c_void,
+                file_mapping_handle,
+                file_mapping_offset,
+            ).unwrap();
+
+        GLOBAL_BACKBUFFER.handle = dib_bitmap_handle;
+        let hgdiobj: win32::HGDIOBJ = dib_bitmap_handle.into();
+        win32::SelectObject(GLOBAL_BACKBUFFER.device_context, hgdiobj);
+    }
+}
+
 unsafe extern "system" fn win32_window_proc(
     window_handle: win32_base::HWND,
     msg: u32,
@@ -108,7 +145,7 @@ unsafe extern "system" fn win32_window_proc(
 ) -> win32_base::LRESULT {
     match msg {
         win32_ui::WM_KEYDOWN => {
-            let WPARAM(key_code) = wparam;
+            let win32::WPARAM(key_code) = wparam;
             if key_code == b'Q' as usize || key_code == win32_input::VK_ESCAPE.0 as usize {
                 let _ = win32::DestroyWindow(window_handle);
             }
@@ -121,9 +158,46 @@ unsafe extern "system" fn win32_window_proc(
             win32_base::LRESULT(0)
         }
 
-        win32_ui::WM_PAINT => win32_base::LRESULT(0),
+        win32_ui::WM_PAINT => {
+            let mut paint = win32::PAINTSTRUCT::default();
+            unsafe {
+                let dest_device_context: win32::HDC = win32::BeginPaint(window_handle, &mut paint);
+                let dest_x: i32 = paint.rcPaint.left;
+                let dest_y: i32 = paint.rcPaint.top;
+                let blit_width: i32 = paint.rcPaint.right - paint.rcPaint.left;
+                let blit_height: i32 = paint.rcPaint.bottom - paint.rcPaint.top;
+                let source_device_context: win32::HDC = GLOBAL_BACKBUFFER.device_context;
+                let source_x: i32 = paint.rcPaint.left;
+                let source_y: i32 = paint.rcPaint.top;
+                let raster_operation: win32::ROP_CODE = win32::SRCCOPY;
 
-        win32_ui::WM_SIZE => win32_base::LRESULT(0),
+                win32::BitBlt(
+                    dest_device_context,
+                    dest_x,
+                    dest_y,
+                    blit_width,
+                    blit_height,
+                    source_device_context,
+                    source_x,
+                    source_y,
+                    raster_operation,
+                );
+
+                let _ = win32::EndPaint(window_handle, &paint);
+            };
+
+            win32_base::LRESULT(0)
+        }
+
+        win32_ui::WM_SIZE => {
+            let new_width  = (lparam.0 & 0xFFFF) as u32;
+            let new_height = ((lparam.0 >> 16) & 0xFFFF) as u32;
+            if new_width > 0 && new_height > 0 {
+                win32_resize_dib_section(new_width, new_height);
+            }
+
+            win32_base::LRESULT(0)
+        }
 
         _ => win32::DefWindowProcW(window_handle, msg, wparam, lparam),
     }
@@ -195,8 +269,8 @@ fn main() -> windows::core::Result<()> {
     }
 
     let mut msg = win32_ui::MSG::default();
-    let x_offset: u32 = 0;
-    let y_offset: u32 = 0;
+    let mut x_offset: f32 = 0.0;
+    let mut y_offset: f32 = 0.0;
 
     while unsafe { RUNNING } {
         unsafe {
@@ -209,10 +283,17 @@ fn main() -> windows::core::Result<()> {
                 win32::DispatchMessageW(&msg);
             }
 
-            draw_gradient(x_offset, y_offset);
-            x_offset += 1;
+            if !RUNNING {
+                break;
+            }
 
-            win32::InvalidateRect(window_handle, None, false).expect("Failed to invalidate the region");
+            draw_gradient(x_offset, y_offset);
+            y_offset += 0.35;
+            x_offset += 0.5;
+
+            win32::InvalidateRect(window_handle, None, false)
+                .expect("Failed to invalidate the region");
+
             win32::UpdateWindow(window_handle)
                 .ok()
                 .expect("Failed to update the window");
@@ -220,10 +301,13 @@ fn main() -> windows::core::Result<()> {
     }
 
     unsafe {
-        if !GLOBAL_BACKBUFFER.handle.is_invalid() {
+        let handle = GLOBAL_BACKBUFFER.handle;
+        let device_context = GLOBAL_BACKBUFFER.device_context;
+
+        if !handle.is_invalid() {
            win32::DeleteObject(GLOBAL_BACKBUFFER.handle).expect("Failed to delete backbuffer HBITMAP");
         }
-        if !GLOBAL_BACKBUFFER.device_context.is_invalid() {
+        if !device_context.is_invalid() {
             win32::DeleteDC(GLOBAL_BACKBUFFER.device_context).expect("Failed to delete backbuffer device context");
         }
     }
