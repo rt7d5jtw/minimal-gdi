@@ -31,6 +31,9 @@ struct Win32_OffscreenBuffer {
     buffer: OffscreenBuffer,
 }
 
+// Global variables
+static mut RUNNING: bool = true;
+
 unsafe impl Sync for OffscreenBuffer {}
 unsafe impl Sync for Win32_OffscreenBuffer {}
 
@@ -66,8 +69,6 @@ static mut GLOBAL_BACKBUFFER: Win32_OffscreenBuffer = Win32_OffscreenBuffer {
     },
 };
 
-static RUNNING: AtomicBool = AtomicBool::new(true);
-
 unsafe extern "system" fn win32_window_proc(
     window_handle: win32_base::HWND,
     msg: u32,
@@ -83,7 +84,7 @@ unsafe extern "system" fn win32_window_proc(
         }
 
         win32_ui::WM_DESTROY => {
-            RUNNING.store(false, Ordering::Relaxed);
+            RUNNING = false;
             win32::PostQuitMessage(0);
             win32_base::LRESULT(0)
         }
@@ -163,11 +164,11 @@ fn main() -> windows::core::Result<()> {
 
     let mut msg = win32_ui::MSG::default();
 
-    while RUNNING.load(Ordering::Relaxed) {
+    while unsafe { RUNNING } {
         unsafe {
             while win32::PeekMessageW(&mut msg, None, 0, 0, win32_ui::PM_REMOVE).as_bool() {
                 if msg.message == win32_ui::WM_QUIT {
-                    RUNNING.store(false, Ordering::Relaxed);
+                    RUNNING = false;
                 }
 
                 let _ = win32::TranslateMessage(&msg);
