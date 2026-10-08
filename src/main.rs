@@ -28,11 +28,12 @@ struct Win32_OffscreenBuffer {
     info: win32_gdi::BITMAPINFO,
     handle: win32_gdi::HBITMAP,
     device_context: win32_gdi::HDC,
-    buffer: OffscreenBuffer,
+    offscreen_buffer: OffscreenBuffer,
 }
 
 // Global variables
 static mut RUNNING: bool = true;
+const BYTES_PER_PIXEL: u32 = 4;
 
 unsafe impl Sync for OffscreenBuffer {}
 unsafe impl Sync for Win32_OffscreenBuffer {}
@@ -61,13 +62,43 @@ static mut GLOBAL_BACKBUFFER: Win32_OffscreenBuffer = Win32_OffscreenBuffer {
     },
     handle: win32_gdi::HBITMAP(null_mut()),
     device_context: win32_gdi::HDC(null_mut()),
-    buffer: OffscreenBuffer {
+    offscreen_buffer: OffscreenBuffer {
         width: 0,
         height: 0,
-        pitch: 0,
+        pitch: BYTES_PER_PIXEL,
         pixels: null_mut(),
     },
 };
+
+fn draw_gradient(x_offset: u32, y_offset: u32) {
+    let offscreen_buffer = unsafe { GLOBAL_BACKBUFFER.offscreen_buffer };
+    if offscreen_buffer.pixels.is_null() {
+        return;
+    }
+
+    let width: u32  = offscreen_buffer.width.unsigned_abs();
+    let height: u32 = offscreen_buffer.height.unsigned_abs();
+    let mut row = offscreen_buffer.pixels as *mut u8;
+
+    for y in 0..height {
+        let mut pixel: *mut u32 = row as *mut u32;
+        for x in 0..width {
+            // clamp to 8 bits
+            let blue  = (x + x_offset) & 0xFF;
+            let green = (y + y_offset) & 0xFF;
+            let red   = 0;
+            let packed_colors: u32 = (red << 16) | (green << 8) | blue;
+            unsafe {
+                *pixel = packed_colors;
+                pixel  = pixel.add(1);
+            };
+        }
+
+        unsafe {
+            row = row.offset(offscreen_buffer.pitch as isize);
+        }
+    }
+}
 
 unsafe extern "system" fn win32_window_proc(
     window_handle: win32_base::HWND,
@@ -164,6 +195,8 @@ fn main() -> windows::core::Result<()> {
     }
 
     let mut msg = win32_ui::MSG::default();
+    let x_offset: u32 = 0;
+    let y_offset: u32 = 0;
 
     while unsafe { RUNNING } {
         unsafe {
@@ -175,6 +208,9 @@ fn main() -> windows::core::Result<()> {
                 let _ = win32::TranslateMessage(&msg);
                 win32::DispatchMessageW(&msg);
             }
+
+            draw_gradient(x_offset, y_offset);
+            x_offset += 1;
 
             win32::InvalidateRect(window_handle, None, false).expect("Failed to invalidate the region");
             win32::UpdateWindow(window_handle)
