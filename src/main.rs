@@ -99,7 +99,7 @@ unsafe extern "system" fn win32_window_proc(
 }
 
 fn main() -> windows::core::Result<()> {
-    let instance = unsafe { win32::GetModuleHandleW(None)? };
+    let instance: win32::HMODULE = unsafe { win32::GetModuleHandleW(None)? };
 
     let window_class = win32_ui::WNDCLASSEXW {
         cbSize: size_of::<win32_ui::WNDCLASSEXW>() as u32,
