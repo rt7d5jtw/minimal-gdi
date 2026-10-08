@@ -77,7 +77,8 @@ unsafe extern "system" fn win32_window_proc(
 ) -> win32_base::LRESULT {
     match msg {
         win32_ui::WM_KEYDOWN => {
-            if wparam.0 == b'Q' as usize || wparam.0 == win32_input::VK_ESCAPE.0 as usize {
+            let WPARAM(key_code) = wparam;
+            if key_code == b'Q' as usize || key_code == win32_input::VK_ESCAPE.0 as usize {
                 let _ = win32::DestroyWindow(window_handle);
             }
             win32_base::LRESULT(0)
