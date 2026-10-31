@@ -14,7 +14,7 @@ void draw_gradient(OffscreenBuffer *buffer, int x_offset, int y_offset)
     int x, y;
     uint8_t blue, green, red;
 
-    if (!buffer || !buffer->pixels) 
+    if (!buffer || !buffer->pixels)
     {
         return;
     }
